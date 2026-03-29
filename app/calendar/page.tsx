@@ -2,31 +2,59 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  ChevronLeft, ChevronRight, Flame, Dumbbell, Target, Utensils, 
+  ChevronLeft, ChevronRight, Dumbbell, Target, Utensils, 
   Moon, TrendingUp, Code, LineChart, Mic, Coffee, 
-  Loader2, Brain, Activity, BookOpen
+  Loader2, Brain, Activity, BookOpen, Image as ImageIcon,
+  Gamepad2, Video, Book, Briefcase, Music
 } from 'lucide-react';
 
 const DAYS_IN_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const getTagInfo = (tag: string) => {
-  switch(tag) {
-    case 'coding': return { label: 'Code & Build', icon: <Code size={12} />, color: 'text-blue-400 bg-blue-500/20 border-blue-500/30' };
-    case 'trading': return { label: 'Gold Trading', icon: <LineChart size={12} />, color: 'text-amber-400 bg-amber-500/20 border-amber-500/30' };
-    case 'dubbing': return { label: 'Voice Dubbing', icon: <Mic size={12} />, color: 'text-purple-400 bg-purple-500/20 border-purple-500/30' };
-    case 'rest': return { label: 'Rest Day', icon: <Coffee size={12} />, color: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30' };
-    default: return { label: tag.replace('custom-', 'Activity '), icon: <Target size={12} />, color: 'text-zinc-400 bg-zinc-500/20 border-zinc-500/30' };
-  }
-};
 
 export default function CalendarPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDate()); 
   const [monthData, setMonthData] = useState<Record<number, any>>({});
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
+  const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [weeklyStats, setWeeklyStats] = useState({ avgCal: 0, avgSleep: 0, totalVolume: 0 });
+
+  const [customTags, setCustomTags] = useState<any[]>([]);
+
+  const ICON_MAP: Record<string, any> = {
+    target: <Target size={12} />, code: <Code size={12} />, chart: <LineChart size={12} />, 
+    mic: <Mic size={12} />, game: <Gamepad2 size={12} />, video: <Video size={12} />, 
+    book: <Book size={12} />, music: <Music size={12} />, work: <Briefcase size={12} />,
+    coffee: <Coffee size={12} />
+  };
+
+  const getTagInfo = (tagId: string) => {
+    const foundTag = customTags.find(t => t.id === tagId);
+    if (foundTag) {
+      return { 
+        label: foundTag.label, 
+        icon: ICON_MAP[foundTag.iconName] || <Target size={12} />, 
+        color: foundTag.colorClass 
+      };
+    }
+    
+    switch(tagId) {
+      case 'coding': return { label: 'Code & Build', icon: <Code size={12} />, color: 'text-blue-400 bg-blue-500/20 border-blue-500/30' };
+      case 'trading': return { label: 'Gold Trading', icon: <LineChart size={12} />, color: 'text-amber-400 bg-amber-500/20 border-amber-500/30' };
+      case 'dubbing': return { label: 'Voice Dubbing', icon: <Mic size={12} />, color: 'text-purple-400 bg-purple-500/20 border-purple-500/30' };
+      case 'rest': return { label: 'Rest Day', icon: <Coffee size={12} />, color: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30' };
+      default: return { label: 'Activity', icon: <Target size={12} />, color: 'text-zinc-400 bg-zinc-500/20 border-zinc-500/30' };
+    }
+  };
+
+  useEffect(() => {
+    const savedTags = localStorage.getItem('biolog_custom_tags');
+    if (savedTags) {
+      setCustomTags(JSON.parse(savedTags));
+    }
+  }, []);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -61,21 +89,33 @@ export default function CalendarPage() {
         if (profile.goal_type === 'build_muscle') targetCal += 300;
       }
 
-      const [bodyRes, foodRes, workoutRes] = await Promise.all([
-        supabase.from('body_logs').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
+      const [bodyRes, foodRes, workoutRes, photosRes] = await Promise.all([
+        supabase.from('body_logs').select('*').eq('user_id', userId).order('date', { ascending: true }),
         supabase.from('food_logs').select('date, calories').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
-        supabase.from('workout_logs').select('date, notes').eq('user_id', userId).gte('date', startDate).lte('date', endDate)
+        supabase.from('workout_logs').select('date, notes').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
+        supabase.from('body_photos').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate)
       ]);
 
       const newMonthData: Record<number, any> = {};
 
-      bodyRes.data?.forEach(log => {
-        const day = parseInt(log.date.split('-')[2], 10);
-        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0 };
-        newMonthData[day].weight = log.weight;
-        newMonthData[day].sleep = log.sleep_hours;
-        newMonthData[day].tags = log.tags;
-        newMonthData[day].notes = log.notes;
+      if (bodyRes.data) {
+        setWeightHistory(bodyRes.data); 
+        const currentMonthLogs = bodyRes.data.filter(log => log.date >= startDate && log.date <= endDate);
+        currentMonthLogs.forEach(log => {
+          const day = parseInt(log.date.split('-')[2], 10);
+          if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [] };
+          newMonthData[day].weight = log.weight;
+          newMonthData[day].sleep = log.sleep_hours;
+          newMonthData[day].tags = log.tags;
+          newMonthData[day].notes = log.notes;
+        });
+      }
+
+      photosRes.data?.forEach(photo => {
+        const day = parseInt(photo.date.split('-')[2], 10);
+        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [] };
+        if (!newMonthData[day].photos) newMonthData[day].photos = [];
+        newMonthData[day].photos.push(photo);
       });
 
       foodRes.data?.forEach(log => {
@@ -110,30 +150,18 @@ export default function CalendarPage() {
         let score = 0;
         const d = newMonthData[Number(day)];
         
-        // 1. ความสม่ำเสมอในการบันทึกน้ำหนัก (10 คะแนน)
-        // งานวิจัยชี้ว่าการชั่งน้ำหนักบ่อยช่วยให้คุมเป้าหมายได้ดีขึ้น
         if (d.weight) score += 10;
-
-        // 2. การนอนหลับพักผ่อน (20 คะแนน)
-        // ให้คะแนนตามเกณฑ์การฟื้นฟูร่างกายที่ดี (Optimal Recovery)
         if (d.sleep) {
-          if (d.sleep >= 7 && d.sleep <= 9) score += 20; // ช่วงเวลาที่ดีที่สุด (Ideal)
-          else if (d.sleep >= 6) score += 10;            // พอใช้ได้
-          else score += 5;                               // นอนน้อยเกินไป
+          if (d.sleep >= 7 && d.sleep <= 9) score += 20;
+          else if (d.sleep >= 6) score += 10;
+          else score += 5;
         }
-
-        // 3. อาหารและพลังงาน (40 คะแนน) 
-        // คำนวณความแม่นยำเทียบกับเป้าหมาย (Adherence Rate)
         if (d.calories > 0) {
           const calPercent = (d.calories / targetCal) * 100;
-          // กินได้ตรงเป้า ±10% คือเกณฑ์ที่งานวิจัยยอมรับว่าให้ผลลัพธ์แม่นยำที่สุด
           if (calPercent >= 90 && calPercent <= 110) score += 40; 
-          else if (calPercent >= 75 && calPercent <= 125) score += 25; // คลาดเคลื่อนเล็กน้อย
-          else if (calPercent >= 50) score += 10;                      // เริ่มบันทึกแต่ยังไม่ถึงเป้า
+          else if (calPercent >= 75 && calPercent <= 125) score += 25; 
+          else if (calPercent >= 50) score += 10; 
         }
-
-        // 4. การออกกำลังกาย (30 คะแนน)
-        // เน้นที่ความสม่ำเสมอของการฝึก (Training Session Completion)
         if (d.workout) {
           score += 30;
         }
@@ -178,24 +206,34 @@ export default function CalendarPage() {
 
   const selectedData = monthData[selectedDay];
 
-  const getWeeklyTrend = () => {
-    let trend = [];
-    let lastKnownWeight = userProfile?.weight_start || 60;
+  const getFullTrend = () => {
+    if (weightHistory.length === 0) return [];
     
-    for(let i = 6; i >= 0; i--) {
-      const d = selectedDay - i;
-      if (monthData[d] && monthData[d].weight) {
-        lastKnownWeight = monthData[d].weight;
+    const trend = [];
+    const pad = (n: number) => String(n).padStart(2, '0');
+    
+    const firstDateStr = weightHistory[0].date;
+    let current = new Date(firstDateStr);
+    const target = new Date(year, month, selectedDay);
+    
+    let lastKnownWeight = weightHistory[0].weight || userProfile?.weight_start || 60;
+    const weightMap = new Map(weightHistory.map(w => [w.date, w.weight]));
+
+    while (current <= target) {
+      const dateStr = `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`;
+      if (weightMap.has(dateStr) && weightMap.get(dateStr)) {
+        lastKnownWeight = weightMap.get(dateStr);
       }
-      trend.push(lastKnownWeight);
+      trend.push({ date: dateStr, weight: lastKnownWeight });
+      current.setDate(current.getDate() + 1);
     }
     return trend;
   };
 
-  const weeklyWeights = getWeeklyTrend();
-  const actualWeights = weeklyWeights.filter(w => w > 0);
-  const minWeight = Math.min(...actualWeights) - 0.2;
-  const maxWeight = Math.max(...actualWeights) + 0.2;
+  const fullTrend = getFullTrend();
+  const actualWeights = fullTrend.map(t => t.weight).filter(w => w > 0);
+  const minWeight = actualWeights.length > 0 ? Math.min(...actualWeights) - 0.2 : 0;
+  const maxWeight = actualWeights.length > 0 ? Math.max(...actualWeights) + 0.2 : 100;
   const weightDiff = maxWeight - minWeight;
 
   const getScienceAnalysis = () => {
@@ -206,12 +244,10 @@ export default function CalendarPage() {
     const a = parseInt(userProfile.age) || 25;
     const gender = userProfile.gender || 'male';
 
-    // สูตร Mifflin-St Jeor
     let bmr = (10 * w) + (6.25 * h) - (5 * a);
     bmr = gender === 'male' ? bmr + 5 : bmr - 161;
     const tdee = Math.round(bmr * 1.55);
 
-    // คำนวณ Target Calories ให้ตรงกับหน้า Nutrition
     let targetCal = tdee;
     const goal = userProfile.goal_type;
     if (goal === 'lose_weight') targetCal -= 500;
@@ -230,7 +266,7 @@ export default function CalendarPage() {
           analysisText = "Starvation Risk: ระวัง! พลังงานน้อยกว่า BMR ร่างกายจะสลายกล้ามเนื้อมาใช้เป็นพลังงาน แนะนำให้กินเพิ่มด่วน";
           statusColor = "text-red-500";
         } else if (avgCal < tdee) {
-          analysisText = "Caloric Deficit: พลังงานติดลบ ร่างกายไม่สามารถสร้างกล้ามเนื้อเพิ่มได้ (คุณกำลังอยู่ในสภาวะลดน้ำหนัก)";
+          analysisText = "Caloric Deficit: พลังงานติดลบ ร่างกายไม่สามารถสร้างกล้ามเนื้อเพิ่มได้";
           statusColor = "text-amber-500";
         } else if (avgCal >= tdee && avgCal < targetCal - 150) {
           analysisText = "Maintenance / Recomp: พลังงานเท่ากับที่ใช้ไป กล้ามเนื้อจะพัฒนาได้ช้ามาก แนะนำให้เพิ่มอาหารอีกนิดครับ";
@@ -262,7 +298,6 @@ export default function CalendarPage() {
         }
       }
       else {
-        // Maintain
         if (avgCal < tdee - 250) {
           analysisText = "Unintended Weight Loss: พลังงานน้อยเกินไปสำหรับการรักษาน้ำหนัก คุณอาจสูญเสียน้ำหนักและกล้ามเนื้อได้";
           statusColor = "text-amber-500";
@@ -281,7 +316,7 @@ export default function CalendarPage() {
 
   const analysis = getScienceAnalysis();
 
-  return (
+return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-500 pb-24">
       
       {/* Header */}
@@ -300,7 +335,6 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* Month Selector */}
         <div className="flex items-center justify-between">
           <button onClick={prevMonth} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors">
             <ChevronLeft size={20} />
@@ -313,7 +347,6 @@ export default function CalendarPage() {
           </button>
         </div>
 
-        {/* Calendar Grid */}
         <div className="flex flex-col gap-2">
           <div className="grid grid-cols-7 gap-2 mb-1">
             {DAYS_IN_WEEK.map(day => (
@@ -347,6 +380,9 @@ export default function CalendarPage() {
                   {data?.notes && (
                     <div className="absolute bottom-1 w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_5px_rgba(255,255,255,0.8)]"></div>
                   )}
+                  {data?.photos && data.photos.length > 0 && (
+                    <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-blue-400 rounded-full shadow-[0_0_5px_rgba(96,165,250,0.8)]"></div>
+                  )}
                 </button>
               );
             })}
@@ -354,31 +390,89 @@ export default function CalendarPage() {
         </div>
       </section>
 
-      {/* AI Science Analysis Panel */}
-      <section className="bg-gradient-to-br from-blue-900/20 to-[#18181b] border border-blue-500/30 p-5 rounded-3xl flex flex-col gap-3 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl -mr-10 -mt-10"></div>
-        <div className="flex items-center gap-2 relative z-10">
-          <Brain size={20} className="text-blue-400" />
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider">BioLog Data Analysis</h3>
-        </div>
-        
-        <div className="flex flex-col gap-2 relative z-10">
-          <p className="text-sm font-medium text-zinc-300 leading-relaxed">
-            {analysis?.analysisText || "กำลังคำนวณข้อมูลร่างกาย..."}
-          </p>
-          <div className="flex items-center gap-4 mt-2 border-t border-zinc-800 pt-3">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-500 uppercase font-bold">Target Calories</span>
-              <span className="text-lg font-black text-blue-400">{analysis?.targetCal || 0} <span className="text-[10px] text-zinc-500">kcal/day</span></span>
+      {/* Weight Graph */}
+      {fullTrend.length > 0 && (
+        <section className="bg-[#18181b] border border-[#27272a] p-5 rounded-3xl flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={18} className="text-blue-400" />
+              <span className="text-sm font-bold text-white">Weight Journey</span>
             </div>
-            <div className="h-8 w-px bg-zinc-800"></div>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-500 uppercase font-bold">Avg. Weekly Intake</span>
-              <span className={`text-lg font-black ${analysis?.statusColor}`}>{weeklyStats.avgCal} <span className="text-[10px] text-zinc-500">kcal</span></span>
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl font-bold text-white">
+                {selectedData?.weight || fullTrend[fullTrend.length - 1]?.weight || '-'}
+              </span>
+              <span className="text-xs font-medium text-zinc-500">kg</span>
             </div>
           </div>
-        </div>
-      </section>
+          
+          <div className="overflow-x-auto pb-2 custom-scrollbar">
+            <div style={{ width: Math.max(300, fullTrend.length * 45), height: 120 }} className="relative mt-4 px-2">
+              <svg width="100%" height="100%" className="overflow-visible">
+                <polyline
+                  points={fullTrend.map((item, i) => {
+                    const x = i * 45 + 20;
+                    const y = 80 - ((item.weight - minWeight) / (weightDiff > 0 ? weightDiff : 1)) * 60;
+                    return `${x},${y}`;
+                  }).join(' ')}
+                  fill="none"
+                  stroke="#3b82f6"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="opacity-70"
+                />
+                
+                {fullTrend.map((item, i) => {
+                  const x = i * 45 + 20;
+                  const y = 80 - ((item.weight - minWeight) / (weightDiff > 0 ? weightDiff : 1)) * 60;
+                  const isSelectedDay = item.date === `${year}-${String(month + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
+                  
+                  return (
+                    <g key={i}>
+                      <circle
+                        cx={x}
+                        cy={y}
+                        r={isSelectedDay ? 6 : 4}
+                        fill={isSelectedDay ? "#ffffff" : "#18181b"}
+                        stroke="#3b82f6"
+                        strokeWidth="2"
+                        className="transition-all duration-300"
+                      />
+                      
+                      <text
+                        x={x}
+                        y={y - 12}
+                        fontSize="10"
+                        fill={isSelectedDay ? "#ffffff" : "#a1a1aa"}
+                        textAnchor="middle"
+                        className={isSelectedDay ? "font-bold" : ""}
+                      >
+                        {item.weight}
+                      </text>
+                      
+                      <text 
+                        x={x} 
+                        y={y + 18} 
+                        fontSize="9" 
+                        fill={isSelectedDay ? "#3b82f6" : "#71717a"} 
+                        textAnchor="middle" 
+                        className={isSelectedDay ? "font-bold" : ""}
+                      >
+                        {parseInt(item.date.split('-')[2])}/{parseInt(item.date.split('-')[1])}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+          
+          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest text-center">
+            Showing {fullTrend.length} days of progress
+          </p>
+        </section>
+      )}
 
       {/* Daily Summary Panel */}
       <section className="flex flex-col gap-4">
@@ -387,7 +481,7 @@ export default function CalendarPage() {
           Summary: {monthName} {selectedDay}, {year}
         </h3>
 
-        {selectedData && (selectedData.weight || selectedData.sleep || selectedData.calories || selectedData.workout || (selectedData.tags && selectedData.tags.length > 0)) ? (
+        {selectedData && (selectedData.weight || selectedData.sleep || selectedData.calories || selectedData.workout || (selectedData.tags && selectedData.tags.length > 0) || selectedData.notes || (selectedData.photos && selectedData.photos.length > 0)) ? (
           <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
             
             {selectedData.tags && selectedData.tags.length > 0 && (
@@ -457,46 +551,38 @@ export default function CalendarPage() {
                 </div>
               </div>
             </div>
+            
+            {selectedData.notes && (
+              <div className="bg-[#09090b] p-4 rounded-xl border border-zinc-800 text-sm text-zinc-300 flex flex-col gap-2">
+                <span className="text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-1.5">
+                  <BookOpen size={12} /> Journal Notes
+                </span>
+                <p className="leading-relaxed break-words whitespace-pre-wrap">{selectedData.notes}</p>
+              </div>
+            )}
 
-            {selectedData.weight && (
-              <div className="bg-[#18181b] border border-[#27272a] p-5 rounded-3xl flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp size={18} className="text-blue-400" />
-                    <span className="text-sm font-bold text-white">Weight Trend</span>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xl font-bold text-white">{selectedData.weight}</span>
-                    <span className="text-xs font-medium text-zinc-500">kg</span>
-                  </div>
-                </div>
+            {selectedData.photos && selectedData.photos.length > 0 && (
+              <div className="bg-[#18181b] border border-[#27272a] p-4 rounded-3xl flex flex-col gap-3">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <ImageIcon size={12} className="text-zinc-400" /> Progress Photos ({selectedData.photos.length})
+                </span>
                 
-                <div className="h-20 flex items-end justify-between gap-1 pt-4 border-b border-[#27272a] relative mt-2">
-                  {weeklyWeights.map((w, i) => {
-                    const heightPercent = weightDiff > 0 ? ((w - minWeight) / weightDiff) * 100 : 50;
-                    const isToday = i === 6;
-                    return (
-                      <div key={i} className="flex flex-col items-center gap-1 w-full group relative">
-                        <div className="absolute -top-6 bg-zinc-800 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                          {w}
-                        </div>
-                        <div 
-                          className={`w-full rounded-t-sm transition-all duration-500 ${isToday ? 'bg-blue-500' : 'bg-zinc-700'}`}
-                          style={{ height: `${Math.max(10, heightPercent)}%` }}
-                        ></div>
+                <div className="flex overflow-x-auto gap-3 pb-2 custom-scrollbar">
+                  {selectedData.photos.map((photo: any, idx: number) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => setSelectedImage(photo.photo_url)} // 🌟 คลิกเพื่อเปิด Modal
+                      className="min-w-[140px] sm:min-w-[160px] aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-zinc-800 flex-shrink-0 relative group cursor-pointer active:scale-95 transition-transform"
+                    >
+                      <img src={photo.photo_url} alt={photo.label} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 pt-8">
+                        <span className="text-[10px] font-bold text-white uppercase tracking-widest truncate block">
+                          {photo.label || 'Progress Photo'}
+                        </span>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
-                
-                {selectedData.notes && (
-                  <div className="mt-2 bg-[#09090b] p-4 rounded-xl border border-zinc-800 text-sm text-zinc-300 flex flex-col gap-2">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500 flex items-center gap-1.5">
-                      <BookOpen size={12} /> Journal Notes
-                    </span>
-                    <p className="leading-relaxed">{selectedData.notes}</p>
-                  </div>
-                )}
               </div>
             )}
 
@@ -511,6 +597,53 @@ export default function CalendarPage() {
           </div>
         )}
       </section>
+
+      {/* Analysis Panel */}
+      <section className="bg-gradient-to-br from-blue-900/20 to-[#18181b] border border-blue-500/30 p-5 rounded-3xl flex flex-col gap-3 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl -mr-10 -mt-10"></div>
+        <div className="flex items-center gap-2 relative z-10">
+          <Brain size={20} className="text-blue-400" />
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">BioLog Data Analysis</h3>
+        </div>
+        
+        <div className="flex flex-col gap-2 relative z-10">
+          <p className="text-sm font-medium text-zinc-300 leading-relaxed">
+            {analysis?.analysisText || "กำลังคำนวณข้อมูลร่างกาย..."}
+          </p>
+          <div className="flex items-center gap-4 mt-2 border-t border-zinc-800 pt-3">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-500 uppercase font-bold">Target Calories</span>
+              <span className="text-lg font-black text-blue-400">{analysis?.targetCal || 0} <span className="text-[10px] text-zinc-500">kcal/day</span></span>
+            </div>
+            <div className="h-8 w-px bg-zinc-800"></div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-500 uppercase font-bold">Avg. Weekly Intake</span>
+              <span className={`text-lg font-black ${analysis?.statusColor}`}>{weeklyStats.avgCal} <span className="text-[10px] text-zinc-500">kcal</span></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Image Fullscreen Modal */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedImage(null)} // คลิกพื้นที่ว่างเพื่อปิด
+        >
+          
+          <div className="relative max-w-[95vw] max-h-[85vh] overflow-hidden rounded-2xl shadow-2xl">
+            <img 
+              src={selectedImage} 
+              alt="Full view" 
+              className="w-full h-full object-contain animate-in zoom-in-95 duration-300"
+            />
+          </div>
+          
+          <p className="absolute bottom-10 text-zinc-500 text-xs font-bold uppercase tracking-[0.2em]">
+            Tap anywhere to close
+          </p>
+        </div>
+      )}
 
     </div>
   );

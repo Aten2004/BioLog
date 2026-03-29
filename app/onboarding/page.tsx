@@ -84,14 +84,14 @@ export default function OnboardingPage() {
   if (isLoading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-red-500" size={32} /></div>;
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-500 py-10 max-w-md mx-auto px-4">
-      <section className="text-center flex flex-col gap-2 mb-4">
+    <div className="flex flex-col gap-4 animate-in fade-in duration-500 items-center justify-center min-h-[85vh] w-full max-w-md mx-auto px-4">
+      <section className="text-center flex flex-col gap-1 w-full">
         <h2 className="text-3xl font-bold text-white">Welcome to BioLog</h2>
         <p className="text-zinc-400 text-sm px-4">ตั้งค่าโปรไฟล์และร่างกายของคุณเพื่อเริ่มติดตามผล</p>
       </section>
 
-      <div className="bg-[#18181b] border border-[#27272a] rounded-[2rem] overflow-hidden shadow-xl">
-        <div className="p-6 flex flex-col gap-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
+      <div className="bg-[#18181b] border border-[#27272a] rounded-[2rem] overflow-hidden shadow-xl w-full">
+        <div className="p-5 sm:p-6 flex flex-col gap-6 max-h-[60vh] sm:max-h-[65vh] overflow-y-auto custom-scrollbar">
           
           <section className="flex flex-col gap-4">
             <h3 className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -193,7 +193,7 @@ export default function OnboardingPage() {
           <button 
             onClick={handleSaveProfile}
             disabled={isSaving || !formData.age || !formData.height || !formData.weight}
-            className="bg-red-600 hover:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-[0_10px_30px_-5px_rgba(220,38,38,0.4)] flex items-center justify-center gap-3 group"
+            className="bg-red-600 hover:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 group"
           >
             {isSaving ? <Loader2 size={18} className="animate-spin" /> : (
               <>
@@ -201,7 +201,6 @@ export default function OnboardingPage() {
               </>
             )}
           </button>
-          <p className="text-[10px] text-zinc-500 text-center mt-4">กรอกข้อมูลเฉพาะที่มีเครื่องหมาย <span className="text-red-500">*</span> หรือข้อมูลที่จำเป็นเบื้องต้นเพื่อความแม่นยำ</p>
         </div>
       </div>
     </div>

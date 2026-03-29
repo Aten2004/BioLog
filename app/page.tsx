@@ -1,11 +1,11 @@
 'use client'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   Scale, Moon, CheckCircle, Target, ChevronRight, Plus, BookOpen, Loader2, 
   Gamepad2, Video, Book, Briefcase, Music, X, Calendar, User, Dumbbell, 
-  Utensils, Activity, Code, LineChart, Mic, Flame, Droplets, Bone, Zap
+  Utensils, Activity, Code, LineChart, Mic, Flame, Droplets, Bone, Camera, Image as ImageIcon, Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -51,6 +51,11 @@ export default function Home() {
   const [boneMass, setBoneMass] = useState('');
   const [bodyWater, setBodyWater] = useState('');
   
+  const [selectedPhotos, setSelectedPhotos] = useState<{id?: string, file?: File, preview: string, name: string, size: string}[]>([]);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const MAX_PHOTOS = 3;
+
   const [customTags, setCustomTags] = useState<any[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeTags, setActiveTags] = useState<string[]>([]);
@@ -107,7 +112,8 @@ export default function Home() {
 
       const today = new Date().toISOString().split('T')[0];
 
-      const { data: bodyLog } = await supabase.from('body_logs').select('*').eq('user_id', session.user.id).eq('date', today).single();
+      const { data: bodyLog } = await supabase.from('body_logs').select('*').eq('user_id', session.user.id).eq('date', today).maybeSingle();
+      
       if (bodyLog) {
         setLogId(bodyLog.id);
         if (bodyLog.weight) setWeight(bodyLog.weight.toString());
@@ -125,6 +131,18 @@ export default function Home() {
         if (userProfile.muscle_mass) setMuscleMass(userProfile.muscle_mass.toString());
         if (userProfile.bone_mass) setBoneMass(userProfile.bone_mass.toString());
         if (userProfile.body_water) setBodyWater(userProfile.body_water.toString());
+      }
+
+      const { data: photosData } = await supabase.from('body_photos').select('*').eq('user_id', session.user.id).eq('date', today);
+      if (photosData && photosData.length > 0) {
+        const loadedPhotos = photosData.map(p => ({
+          id: p.id,
+          file: undefined,
+          preview: p.photo_url,
+          name: p.label || 'Saved Photo',
+          size: 'จากระบบ'
+        }));
+        setSelectedPhotos(loadedPhotos);
       }
 
       const [foodRes, workoutRes] = await Promise.all([
@@ -185,16 +203,142 @@ export default function Home() {
     setActiveTags(prev => prev.filter(id => id !== tagId));
   };
 
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              reject(new Error('Canvas to Blob failed'));
+            }
+          }, 'image/jpeg', 0.7); 
+        };
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const newFiles = Array.from(e.target.files);
+    
+    if (selectedPhotos.length + newFiles.length > MAX_PHOTOS) {
+      showNotification(`อัปโหลดได้สูงสุด ${MAX_PHOTOS} รูปต่อวัน`, 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsCompressing(true);
+    try {
+      const compressedPhotos = await Promise.all(
+        newFiles.map(async (file) => {
+          const compressed = await compressImage(file);
+          return {
+            file: compressed,
+            preview: URL.createObjectURL(compressed),
+            name: file.name,
+            size: formatBytes(compressed.size)
+          };
+        })
+      );
+      
+      setSelectedPhotos(prev => [...prev, ...compressedPhotos]);
+    } catch (error) {
+      showNotification('เกิดข้อผิดพลาดในการประมวลผลรูปภาพ', 'error');
+    } finally {
+      setIsCompressing(false);
+      if (fileInputRef.current) fileInputRef.current.value = ''; 
+    }
+  };
+
+  const removePhoto = async (indexToRemove: number) => {
+    const photo = selectedPhotos[indexToRemove];
+    if (photo.id) {
+      await supabase.from('body_photos').delete().eq('id', photo.id);
+      showNotification('ลบรูปภาพจากระบบแล้ว', 'info');
+    }
+    setSelectedPhotos(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
   const handleSaveCheckIn = async () => {
     if (!user) return;
     setIsSaving(true);
     
     const today = new Date().toISOString().split('T')[0];
+
+    const newPhotos = selectedPhotos.filter(p => !p.id && p.file);
+    
+    for (const photo of newPhotos) {
+      if (photo.file) {
+        const fileExt = photo.file.name.split('.').pop();
+        const fileName = `${user.id}/${today}-${Math.random()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('progress-pics')
+          .upload(fileName, photo.file, { upsert: true });
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('progress-pics')
+            .getPublicUrl(fileName);
+            
+          await supabase.from('body_photos').insert({
+            user_id: user.id,
+            date: today,
+            photo_url: publicUrl,
+            label: photo.name
+          });
+        }
+      }
+    }
+
     const payload = {
       user_id: user.id, date: today,
       weight: weight ? parseFloat(weight) : null,
       sleep_hours: sleep ? parseFloat(sleep) : null,
-      tags: activeTags, notes: notes,
+      tags: activeTags, notes: notes
     };
 
     if (logMode === 'deep') {
@@ -213,14 +357,27 @@ export default function Home() {
       const { error } = await supabase.from('body_logs').update(payload).eq('id', logId);
       saveError = error;
     } else {
-      const { data, error } = await supabase.from('body_logs').insert(payload).select().single();
+      const { data, error } = await supabase.from('body_logs').insert(payload).select().maybeSingle();
       saveError = error;
       if (data) setLogId(data.id);
     }
 
     setIsSaving(false);
-    if (saveError) showNotification('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
-    else showNotification('บันทึกข้อมูลวันนี้เรียบร้อย!', 'success');
+    if (saveError) {
+      showNotification('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+    } else {
+      const { data: latestPhotos } = await supabase.from('body_photos').select('*').eq('user_id', user.id).eq('date', today);
+      if (latestPhotos) {
+        setSelectedPhotos(latestPhotos.map(p => ({
+          id: p.id,
+          file: undefined,
+          preview: p.photo_url,
+          name: p.label || 'Saved Photo',
+          size: 'จากระบบ'
+        })));
+      }
+      showNotification('บันทึกข้อมูลวันนี้เรียบร้อย!', 'success');
+    }
   };
 
   if (isLoading) return <div className="flex justify-center items-center h-[50vh]"><Loader2 className="animate-spin text-red-500" size={32} /></div>;
@@ -258,6 +415,76 @@ export default function Home() {
 
         <div className="px-3 pb-3 flex flex-col gap-6 relative z-10">
           
+          <div className="bg-[#09090b] border border-zinc-800 rounded-[1.5rem] p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                <Camera size={12} className="text-zinc-400" /> Progress Photos ({selectedPhotos.length}/{MAX_PHOTOS})
+              </span>
+              {selectedPhotos.length < MAX_PHOTOS && (
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-[10px] font-bold text-blue-400 uppercase tracking-widest hover:text-blue-300 transition-colors"
+                >
+                  + Add Photo
+                </button>
+              )}
+            </div>
+
+            {isCompressing && (
+              <div className="w-full py-6 border border-dashed border-zinc-800 rounded-xl flex flex-col items-center justify-center gap-2">
+                <Loader2 size={24} className="animate-spin text-red-500" />
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Compressing...</span>
+              </div>
+            )}
+
+            {selectedPhotos.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {selectedPhotos.map((photo, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-[#18181b] border border-zinc-800/50 p-2 rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-black flex-shrink-0 border border-zinc-700">
+                        <img src={photo.preview} alt="preview" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex flex-col overflow-hidden">
+                        <span className="text-xs font-bold text-white truncate w-36 sm:w-48">{photo.name}</span>
+                        <span className="text-[10px] font-medium text-zinc-500">{photo.size}</span>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => removePhoto(idx)}
+                      className="p-2 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all flex-shrink-0 mr-1"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              !isCompressing && (
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-24 flex flex-col items-center justify-center gap-2 hover:bg-zinc-900/50 transition-colors border-dashed border-2 border-transparent hover:border-zinc-700/50 rounded-xl"
+                >
+                  <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center border border-zinc-800 group-hover:bg-zinc-800 transition-colors">
+                    <Plus size={16} className="text-zinc-500" />
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Tap to select images</span>
+                </button>
+              )
+            )}
+
+            <input 
+              type="file" 
+              accept="image/*" 
+              multiple 
+              className="hidden" 
+              ref={fileInputRef} 
+              onChange={handlePhotoSelect} 
+            />
+          </div>
+
+          <div className="h-px w-full bg-zinc-800/50 -my-2"></div>
+
           {/* Input Area */}
           {logMode === 'quick' ? (
             <div className="grid grid-cols-2 gap-3 animate-in fade-in zoom-in-95 duration-300">
@@ -280,10 +507,17 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-300">
+              
               <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-[1.5rem] flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Scale size={14} className="text-blue-400" /> Weight</span>
                 <div className="flex items-center gap-2 w-1/3"><input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-xl font-black text-white focus:outline-none text-right" /><span className="text-xs font-bold text-zinc-600">kg</span></div>
               </div>
+
+              <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-[1.5rem] flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Moon size={14} className="text-indigo-400" /> Sleep</span>
+                <div className="flex items-center gap-2 w-1/3"><input type="number" value={sleep} onChange={(e) => setSleep(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-xl font-black text-white focus:outline-none text-right" /><span className="text-xs font-bold text-zinc-600">hrs</span></div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-[1.5rem] flex flex-col gap-1">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Flame size={12} className="text-orange-500" /> Body Fat</span>
@@ -338,7 +572,7 @@ export default function Home() {
           </div>
 
           <button 
-            onClick={handleSaveCheckIn} disabled={isSaving}
+            onClick={handleSaveCheckIn} disabled={isSaving || isCompressing}
             className="w-full bg-red-600 hover:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-[0_10px_30px_-10px_rgba(220,38,38,0.5)] flex items-center justify-center gap-2 mt-2"
           >
             {isSaving ? <Loader2 size={16} className="animate-spin" /> : 'Log This Day'}
@@ -432,6 +666,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Tag Modal */}
       {tagModal && (
         <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-[#18181b] border border-[#27272a] rounded-[2rem] p-6 w-full max-w-sm shadow-2xl flex flex-col gap-5 animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-200">

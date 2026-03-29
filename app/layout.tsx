@@ -7,10 +7,16 @@ import GlobalTimerAlert from "./components/GlobalTimerAlert";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "BioLog",
+  title: "BioLog | The Body Ledger",
   description: "Advanced biometric and fitness tracker",
+  manifest: "/manifest.json", 
   icons: {
-    icon: "/icon.svg", 
+    icon: [
+      { url: "/Logo_Web.svg", type: "image/svg+xml" }, 
+    ],
+    apple: [
+      { url: "/icon.png", sizes: "512x512", type: "image/png" }, 
+    ],
   },
 };
 

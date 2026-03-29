@@ -65,15 +65,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-500 pb-24">
-      <div className="w-full max-w-md bg-[#18181b] border border-[#27272a] rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden flex flex-col gap-6">
+    <div className="flex flex-col items-center justify-center min-h-[85vh] w-full animate-in fade-in duration-500">
+      <div className="w-full max-w-md bg-[#18181b] border border-[#27272a] rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col gap-5 sm:gap-6">
         
         {/* Background Glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-red-600/10 rounded-full blur-[60px] -mt-20"></div>
 
         {/* Logo Section */}
         <div className="flex flex-col items-center justify-center pt-4 relative z-10">
-          <div className="w-72 h-auto transition-transform hover:scale-105">
+          <div className="w-56 sm:w-64 h-auto transition-transform hover:scale-105">
              <img 
                src="/Logo_Web.svg" 
                alt="BioLog Logo" 
