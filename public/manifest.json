@@ -1,0 +1,17 @@
+{
+  "name": "BioLog",
+  "short_name": "BioLog",
+  "description": "Advanced biometric and fitness tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#dc2626",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
