@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Dumbbell, Target, Utensils, 
   Moon, TrendingUp, Code, LineChart, Mic, Coffee, 
   Loader2, Brain, Activity, BookOpen, Image as ImageIcon,
-  Gamepad2, Video, Book, Briefcase, Music
+  Gamepad2, Video, Book, Briefcase, Music, X
 } from 'lucide-react';
 
 const DAYS_IN_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -16,6 +16,7 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDate()); 
   const [monthData, setMonthData] = useState<Record<number, any>>({});
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false); 
   
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -91,8 +92,8 @@ export default function CalendarPage() {
 
       const [bodyRes, foodRes, workoutRes, photosRes] = await Promise.all([
         supabase.from('body_logs').select('*').eq('user_id', userId).order('date', { ascending: true }),
-        supabase.from('food_logs').select('date, calories').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
-        supabase.from('workout_logs').select('date, notes').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
+        supabase.from('food_logs').select('date, name, calories, protein, carbs, fat').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
+        supabase.from('workout_logs').select('date, exercise_name, sets, reps, weight_kg, notes').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
         supabase.from('body_photos').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate)
       ]);
 
@@ -103,7 +104,7 @@ export default function CalendarPage() {
         const currentMonthLogs = bodyRes.data.filter(log => log.date >= startDate && log.date <= endDate);
         currentMonthLogs.forEach(log => {
           const day = parseInt(log.date.split('-')[2], 10);
-          if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [] };
+          if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [], foods: [], workouts: [] };
           newMonthData[day].weight = log.weight;
           newMonthData[day].sleep = log.sleep_hours;
           newMonthData[day].tags = log.tags;
@@ -113,21 +114,25 @@ export default function CalendarPage() {
 
       photosRes.data?.forEach(photo => {
         const day = parseInt(photo.date.split('-')[2], 10);
-        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [] };
+        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [], foods: [], workouts: [] };
         if (!newMonthData[day].photos) newMonthData[day].photos = [];
         newMonthData[day].photos.push(photo);
       });
 
       foodRes.data?.forEach(log => {
         const day = parseInt(log.date.split('-')[2], 10);
-        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0 };
+        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [], foods: [], workouts: [] };
+        if (!newMonthData[day].foods) newMonthData[day].foods = [];
+        newMonthData[day].foods.push(log);
         newMonthData[day].calories += log.calories;
       });
 
       workoutRes.data?.forEach(log => {
         const day = parseInt(log.date.split('-')[2], 10);
-        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0 };
+        if (!newMonthData[day]) newMonthData[day] = { calories: 0, workout: false, volume: 0, photos: [], foods: [], workouts: [] };
+        if (!newMonthData[day].workouts) newMonthData[day].workouts = [];
         newMonthData[day].workout = true;
+        newMonthData[day].workouts.push(log);
         try {
           if (log.notes) {
             const parsed = JSON.parse(log.notes);
@@ -476,10 +481,21 @@ return (
 
       {/* Daily Summary Panel */}
       <section className="flex flex-col gap-4">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2 px-1">
-          <Target size={18} className="text-red-500" />
-          Summary: {monthName} {selectedDay}, {year}
-        </h3>
+        
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Target size={18} className="text-red-500" />
+            Summary: {monthName} {selectedDay}, {year}
+          </h3>
+          {selectedData && (selectedData.foods?.length > 0 || selectedData.workouts?.length > 0) && (
+            <button 
+              onClick={() => setShowDetailModal(true)} 
+              className="text-[10px] bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider transition-colors shadow-sm"
+            >
+              View Details
+            </button>
+          )}
+        </div>
 
         {selectedData && (selectedData.weight || selectedData.sleep || selectedData.calories || selectedData.workout || (selectedData.tags && selectedData.tags.length > 0) || selectedData.notes || (selectedData.photos && selectedData.photos.length > 0)) ? (
           <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -571,7 +587,7 @@ return (
                   {selectedData.photos.map((photo: any, idx: number) => (
                     <div 
                       key={idx} 
-                      onClick={() => setSelectedImage(photo.photo_url)} // 🌟 คลิกเพื่อเปิด Modal
+                      onClick={() => setSelectedImage(photo.photo_url)}
                       className="min-w-[140px] sm:min-w-[160px] aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-zinc-800 flex-shrink-0 relative group cursor-pointer active:scale-95 transition-transform"
                     >
                       <img src={photo.photo_url} alt={photo.label} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -624,13 +640,103 @@ return (
         </div>
       </section>
 
+      {/* Workout & Food */}
+      {showDetailModal && selectedData && (
+        <div 
+          className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowDetailModal(false)}
+        >
+          <div 
+            className="bg-[#18181b] border border-[#27272a] rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-200 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header ของ Modal */}
+            <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-[#09090b] shadow-sm">
+              <h3 className="text-sm font-bold text-white uppercase tracking-widest">
+                Log Details: {selectedDay} {monthName}
+              </h3>
+              <button onClick={() => setShowDetailModal(false)} className="p-2 bg-zinc-800 hover:bg-red-500/20 hover:text-red-500 rounded-full text-zinc-400 transition-colors">
+                <X size={16}/>
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+              
+              {selectedData.foods && selectedData.foods.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <h4 className="text-xs font-black text-orange-500 uppercase tracking-widest flex items-center gap-2">
+                    <Utensils size={14}/> Food Log
+                  </h4>
+                  <div className="flex flex-col gap-2">
+                    {selectedData.foods.map((f: any, i: number) => (
+                      <div key={i} className="bg-[#09090b] p-3.5 rounded-xl border border-zinc-800 flex justify-between items-center">
+                        <span className="text-sm font-bold text-white">{f.name}</span>
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs font-black text-orange-400">{f.calories} kcal</span>
+                          <span className="text-[10px] text-zinc-500 font-bold tracking-wider mt-0.5">
+                            P: {Number(f.protein).toFixed(0)} • C: {Number(f.carbs).toFixed(0)} • F: {Number(f.fat).toFixed(0)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedData.workouts && selectedData.workouts.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <h4 className="text-xs font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                    <Dumbbell size={14}/> Workout Log
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    {selectedData.workouts.map((w: any, i: number) => {
+                      const notes = w.notes ? JSON.parse(w.notes) : null;
+                      const sets = notes ? (Array.isArray(notes) ? notes : notes.sets || []) : [];
+                      const isBW = notes && !Array.isArray(notes) ? notes.isBodyweight : false;
+                      const completedSets = sets.filter((s: any) => s.done);
+
+                      return (
+                        <div key={i} className="bg-[#09090b] p-4 rounded-xl border border-zinc-800 flex flex-col gap-3">
+                          <div className="flex justify-between items-center border-b border-zinc-800/80 pb-2">
+                            <span className="text-sm font-bold text-white">{w.exercise_name}</span>
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border border-emerald-500/20">
+                              {completedSets.length} Sets
+                            </span>
+                          </div>
+                          
+                          {completedSets.length > 0 ? (
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                              {completedSets.map((s: any, j: number) => (
+                                <div key={j} className="bg-[#18181b] border border-zinc-800/80 rounded-lg py-2 px-1 flex flex-col items-center justify-center">
+                                  <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-0.5">Set {j+1}</span>
+                                  <span className="text-xs font-black text-white">
+                                    {isBW ? 'BW' : `${s.weight}kg`}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 font-bold mt-0.5">{s.reps} Reps</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-zinc-600 font-bold text-center py-2">ไม่ได้บันทึกเซต</p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Image Fullscreen Modal */}
       {selectedImage && (
         <div 
-          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setSelectedImage(null)} // คลิกพื้นที่ว่างเพื่อปิด
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedImage(null)}
         >
-          
           <div className="relative max-w-[95vw] max-h-[85vh] overflow-hidden rounded-2xl shadow-2xl">
             <img 
               src={selectedImage} 
@@ -638,7 +744,6 @@ return (
               className="w-full h-full object-contain animate-in zoom-in-95 duration-300"
             />
           </div>
-          
           <p className="absolute bottom-10 text-zinc-500 text-xs font-bold uppercase tracking-[0.2em]">
             Tap anywhere to close
           </p>
