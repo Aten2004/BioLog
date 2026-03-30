@@ -2,10 +2,36 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Dumbbell, Timer, Plus, Check, Pencil, Trash2, Activity, Flame, CheckCircle, Info, X, Play, Square, Loader2 } from 'lucide-react';
+import { Dumbbell, Timer, Plus, Check, Pencil, Trash2, Activity, Flame, CheckCircle, Info, X, Play, Square, Loader2, Target } from 'lucide-react';
+
+const EXERCISE_LIBRARY: Record<string, { name: string, target: string, isBodyweight: boolean }[]> = {
+  'Upper Body': [
+    { name: 'Push-up', target: 'หน้าอกและหลังแขน', isBodyweight: true },
+    { name: 'Pull-up', target: 'หลังและหน้าแขน', isBodyweight: true },
+    { name: 'Dumbbell Bench Press', target: 'หน้าอก', isBodyweight: false },
+    { name: 'Dumbbell Shoulder Press', target: 'หัวไหล่', isBodyweight: false },
+    { name: 'One-Arm Dumbbell Row', target: 'กล้ามเนื้อหลัง', isBodyweight: false },
+    { name: 'Dumbbell Lateral Raise', target: 'หัวไหล่ด้านข้าง', isBodyweight: false },
+    { name: 'Dumbbell Bicep Curl', target: 'หน้าแขน', isBodyweight: false },
+    { name: 'Dumbbell Triceps Extension', target: 'หลังแขน', isBodyweight: false }
+  ],
+  'Lower Body': [
+    { name: 'Squat', target: 'ขาด้านหน้าและก้น', isBodyweight: false },
+    { name: 'Lunges', target: 'ขาและก้น', isBodyweight: false },
+    { name: 'Dumbbell Romanian Deadlift', target: 'ต้นขาด้านหลังและก้น', isBodyweight: false },
+    { name: 'Calf Raise', target: 'น่อง', isBodyweight: false }
+  ],
+  'Full Body & Core': [
+    { name: 'Burpees', target: 'ทุกส่วนและคาร์ดิโอ', isBodyweight: true },
+    { name: 'Mountain Climbers', target: 'แกนกลางลำตัวและคาร์ดิโอ', isBodyweight: true },
+    { name: 'Dumbbell Thrusters', target: 'ขาและไหล่พร้อมกัน', isBodyweight: false },
+    { name: 'Plank', target: 'หน้าท้องและแกนกลาง', isBodyweight: true }
+  ],
+  'Custom (กำหนดเอง)': []
+};
 
 type WorkoutSet = { id: number; weight: number; reps: number; done: boolean; };
-type Exercise = { id: string | number; name: string; target: string; isBodyweight: boolean; sets: WorkoutSet[]; };
+type Exercise = { id: string | number; name: string; category: string; target: string; isBodyweight: boolean; sets: WorkoutSet[]; };
 type ToastType = 'success' | 'info' | 'error';
 
 export default function WorkoutPage() {
@@ -14,25 +40,23 @@ export default function WorkoutPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // เริ่มต้นเป็น Array ว่าง (รอโหลดจาก Supabase)
   const [exercises, setExercises] = useState<Exercise[]>([]);
   
-  // State สำหรับ Alert และ Modal
   const [toast, setToast] = useState<{ show: boolean, message: string, type: ToastType }>({ show: false, message: '', type: 'success' });
-  const [editModal, setEditModal] = useState<{ show: boolean, exerciseId: string | number | null, currentName: string }>({ show: false, exerciseId: null, currentName: '' });
-  const [newNameInput, setNewNameInput] = useState('');
+  
+  const [editModal, setEditModal] = useState<{ 
+    show: boolean, exerciseId: string | number | null, 
+    category: string, name: string, target: string, isBodyweight: boolean 
+  }>({ show: false, exerciseId: null, category: 'Upper Body', name: '', target: '', isBodyweight: false });
 
-  // State สำหรับ Modal ลบท่าออกกำลังกาย
   const [deleteModal, setDeleteModal] = useState<{ show: boolean, exerciseId: string | number | null }>({ show: false, exerciseId: null });
 
-  // State สำหรับ Timer นับถอยหลัง
   const [timerModal, setTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState({ h: 0, m: 0, s: 0 });
   const [targetTime, setTargetTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0); 
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
-  // ฟังก์ชันแสดง Alert
   const showNotification = (message: string, type: ToastType = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
@@ -41,31 +65,27 @@ export default function WorkoutPage() {
   useEffect(() => {
     const loadTodayWorkout = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
-      }
+      if (!session) { router.push('/login'); return; }
       setUser(session.user);
 
       const today = new Date().toISOString().split('T')[0];
-      const { data, error } = await supabase
-        .from('workout_logs')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('date', today)
-        .order('created_at', { ascending: true });
+      const { data } = await supabase.from('workout_logs').select('*').eq('user_id', session.user.id).eq('date', today).order('created_at', { ascending: true });
 
       if (data && data.length > 0) {
         const loadedExercises: Exercise[] = data.map((d: any) => {
-          const notesData = d.notes ? JSON.parse(d.notes) : [];
+          const notesData = d.notes ? JSON.parse(d.notes) : {};
           const isArray = Array.isArray(notesData);
           const parsedSets = isArray ? notesData : (notesData.sets || []);
           const parsedIsBodyweight = isArray ? false : (notesData.isBodyweight || false);
+          
+          const parsedCategory = isArray ? 'Custom (กำหนดเอง)' : (notesData.category || 'Custom (กำหนดเอง)');
+          const parsedTarget = isArray ? '' : (notesData.target || '');
 
           return {
             id: d.id, 
             name: d.exercise_name,
-            target: "Muscle", 
+            category: parsedCategory,
+            target: parsedTarget, 
             isBodyweight: parsedIsBodyweight,
             sets: parsedSets 
           };
@@ -81,7 +101,6 @@ export default function WorkoutPage() {
   const finishWorkout = async () => {
     if (!user) return;
     setIsSaving(true);
-    
     const today = new Date().toISOString().split('T')[0];
 
     try {
@@ -91,25 +110,19 @@ export default function WorkoutPage() {
         const payload = exercises.map(ex => {
           const completedSets = ex.sets.filter(s => s.done);
           return {
-            user_id: user.id,
-            date: today,
-            exercise_name: ex.name,
+            user_id: user.id, date: today, exercise_name: ex.name,
             sets: completedSets.length,
             reps: completedSets.reduce((sum, s) => sum + (Number(s.reps) || 0), 0), 
             weight_kg: ex.isBodyweight ? 0 : (completedSets.length > 0 ? Math.max(...completedSets.map(s => Number(s.weight) || 0)) : 0),
-            notes: JSON.stringify({ isBodyweight: ex.isBodyweight, sets: ex.sets }) 
+            notes: JSON.stringify({ isBodyweight: ex.isBodyweight, sets: ex.sets, category: ex.category, target: ex.target }) 
           };
         }).filter(p => p.sets > 0); 
 
-        if (payload.length > 0) {
-          const { error } = await supabase.from('workout_logs').insert(payload);
-          if (error) throw error;
-        }
+        if (payload.length > 0) await supabase.from('workout_logs').insert(payload);
       }
 
       showNotification(`บันทึกสำเร็จ! วันนี้ยกไปทั้งหมด ${totalVolume.toLocaleString()} kg`, 'success');
     } catch (error) {
-      console.error(error);
       showNotification('เกิดข้อผิดพลาดในการบันทึก', 'error');
     } finally {
       setIsSaving(false);
@@ -122,9 +135,7 @@ export default function WorkoutPage() {
       const target = parseInt(savedTarget, 10);
       const now = Date.now();
       if (target > now) {
-        setTargetTime(target);
-        setTimeLeft(Math.ceil((target - now) / 1000));
-        setIsTimerRunning(true);
+        setTargetTime(target); setTimeLeft(Math.ceil((target - now) / 1000)); setIsTimerRunning(true);
       } else {
         localStorage.removeItem('workout_timer_target');
         showNotification('หมดเวลาพักแล้ว! ลุยเซตต่อไปกันเลย🔥', 'info');
@@ -139,69 +150,41 @@ export default function WorkoutPage() {
         const now = Date.now();
         const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000));
         setTimeLeft(remaining);
-
-        if (remaining <= 0) {
-          setIsTimerRunning(false);
-          setTargetTime(null);
-        }
+        if (remaining <= 0) { setIsTimerRunning(false); setTargetTime(null); }
       };
-
-      checkTime(); 
-      interval = setInterval(checkTime, 1000); 
+      checkTime(); interval = setInterval(checkTime, 1000); 
     }
     return () => clearInterval(interval);
   }, [isTimerRunning, targetTime]);
 
   const startTimer = () => {
-    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-      Notification.requestPermission();
-    }
+    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission();
     const totalSeconds = (timerInput.h * 3600) + (timerInput.m * 60) + timerInput.s;
     if (totalSeconds > 0) {
       const newTarget = Date.now() + totalSeconds * 1000;
-      setTargetTime(newTarget);
-      setTimeLeft(totalSeconds);
-      setIsTimerRunning(true);
+      setTargetTime(newTarget); setTimeLeft(totalSeconds); setIsTimerRunning(true);
       localStorage.setItem('workout_timer_target', newTarget.toString());
     }
     setTimerModal(false);
   };
 
   const stopTimer = () => {
-    setIsTimerRunning(false);
-    setTargetTime(null);
-    setTimeLeft(0);
-    localStorage.removeItem('workout_timer_target');
-    setTimerModal(false);
+    setIsTimerRunning(false); setTargetTime(null); setTimeLeft(0);
+    localStorage.removeItem('workout_timer_target'); setTimerModal(false);
   };
 
   const formatTime = (totalSeconds: number) => {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
+    const h = Math.floor(totalSeconds / 3600); const m = Math.floor((totalSeconds % 3600) / 60); const s = totalSeconds % 60;
     if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
   const toggleSet = (exerciseId: string | number, setId: number) => {
-    setExercises(exercises.map(ex => {
-      if (ex.id === exerciseId) {
-        return { ...ex, sets: ex.sets.map(set => set.id === setId ? { ...set, done: !set.done } : set) };
-      }
-      return ex;
-    }));
+    setExercises(exercises.map(ex => ex.id === exerciseId ? { ...ex, sets: ex.sets.map(set => set.id === setId ? { ...set, done: !set.done } : set) } : ex));
   };
 
   const updateSet = (exerciseId: string | number, setId: number, field: 'weight' | 'reps', value: string) => {
-    setExercises(exercises.map(ex => {
-      if (ex.id === exerciseId) {
-        return { 
-          ...ex, 
-          sets: ex.sets.map(set => set.id === setId ? { ...set, [field]: value === '' ? 0 : parseFloat(value) } : set) 
-        };
-      }
-      return ex;
-    }));
+    setExercises(exercises.map(ex => ex.id === exerciseId ? { ...ex, sets: ex.sets.map(set => set.id === setId ? { ...set, [field]: value === '' ? 0 : parseFloat(value) } : set) } : ex));
   };
 
   const addSet = (exerciseId: string | number) => {
@@ -216,33 +199,21 @@ export default function WorkoutPage() {
   };
 
   const removeSet = (exerciseId: string | number, setId: number) => {
-    setExercises(exercises.map(ex => {
-      if (ex.id === exerciseId) {
-        return { ...ex, sets: ex.sets.filter(s => s.id !== setId) };
-      }
-      return ex;
-    }));
+    setExercises(exercises.map(ex => ex.id === exerciseId ? { ...ex, sets: ex.sets.filter(s => s.id !== setId) } : ex));
   };
 
   const addExercise = () => {
     const newId = `new-${Date.now()}`; 
     setExercises([...exercises, {
-      id: newId, name: "New Exercise", target: "Any", isBodyweight: false, sets: [{ id: 1, weight: 0, reps: 0, done: false }]
+      id: newId, name: "New Exercise", category: "Custom (กำหนดเอง)", target: "", isBodyweight: false, sets: [{ id: 1, weight: 0, reps: 0, done: false }]
     }]);
   };
 
   const toggleBodyweight = (exerciseId: string | number) => {
-    setExercises(exercises.map(ex => {
-      if (ex.id === exerciseId) {
-        return { ...ex, isBodyweight: !ex.isBodyweight };
-      }
-      return ex;
-    }));
+    setExercises(exercises.map(ex => ex.id === exerciseId ? { ...ex, isBodyweight: !ex.isBodyweight } : ex));
   };
 
-  const openDeleteModal = (exerciseId: string | number) => {
-    setDeleteModal({ show: true, exerciseId });
-  };
+  const openDeleteModal = (exerciseId: string | number) => setDeleteModal({ show: true, exerciseId });
 
   const confirmDeleteExercise = () => {
     if (deleteModal.exerciseId) {
@@ -252,18 +223,44 @@ export default function WorkoutPage() {
     setDeleteModal({ show: false, exerciseId: null });
   };
 
-  const openEditModal = (exerciseId: string | number, currentName: string) => {
-    setNewNameInput(currentName);
-    setEditModal({ show: true, exerciseId, currentName });
+  const openEditModal = (ex: Exercise) => {
+    setEditModal({ 
+      show: true, 
+      exerciseId: ex.id, 
+      category: ex.category || 'Custom (กำหนดเอง)', 
+      name: ex.name, 
+      target: ex.target || '', 
+      isBodyweight: ex.isBodyweight 
+    });
+  };
+
+  const handlePresetSelect = (presetName: string) => {
+    if (!presetName) return;
+    const libraryItems = EXERCISE_LIBRARY[editModal.category] || [];
+    const selectedPreset = libraryItems.find(item => item.name === presetName);
+    if (selectedPreset) {
+      setEditModal({
+        ...editModal,
+        name: selectedPreset.name,
+        target: selectedPreset.target,
+        isBodyweight: selectedPreset.isBodyweight
+      });
+    }
   };
 
   const confirmEditExercise = () => {
-    if (editModal.exerciseId && newNameInput.trim() !== '') {
+    if (editModal.exerciseId && editModal.name.trim() !== '') {
       setExercises(exercises.map(ex => 
-        ex.id === editModal.exerciseId ? { ...ex, name: newNameInput.trim() } : ex
+        ex.id === editModal.exerciseId ? { 
+          ...ex, 
+          name: editModal.name.trim(),
+          category: editModal.category,
+          target: editModal.target.trim(),
+          isBodyweight: editModal.isBodyweight
+        } : ex
       ));
     }
-    setEditModal({ show: false, exerciseId: null, currentName: '' });
+    setEditModal({ show: false, exerciseId: null, category: 'Upper Body', name: '', target: '', isBodyweight: false });
   };
 
   const totalVolume = exercises.reduce((acc, ex) => {
@@ -353,10 +350,24 @@ export default function WorkoutPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-zinc-500 font-bold text-sm">{index + 1}</span>
                   <div className="flex flex-col items-start gap-1">
-                    <span className="text-white font-bold text-sm">{ex.name}</span>
+                    <span className="text-white font-bold text-sm leading-tight">{ex.name}</span>
+                    
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                      {ex.category && ex.category !== 'Custom (กำหนดเอง)' && (
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 flex items-center gap-1">
+                          {ex.category}
+                        </span>
+                      )}
+                      {ex.target && (
+                        <span className="text-[9px] font-medium text-zinc-400">
+                          {ex.category !== 'Custom (กำหนดเอง)' ? '•' : ''} โดน: {ex.target}
+                        </span>
+                      )}
+                    </div>
+
                     <button 
                       onClick={() => toggleBodyweight(ex.id)}
-                      className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors border ${
+                      className={`mt-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors border ${
                         ex.isBodyweight 
                         ? 'bg-blue-500/20 text-blue-400 border-blue-500/50 hover:bg-blue-500/30' 
                         : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:text-zinc-300'
@@ -367,8 +378,8 @@ export default function WorkoutPage() {
                   </div>
                 </div>
                 
-                <div className="flex gap-2 text-zinc-500">
-                  <button onClick={() => openEditModal(ex.id, ex.name)} className="p-1.5 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Edit Name">
+                <div className="flex gap-2 text-zinc-500 self-start mt-1">
+                  <button onClick={() => openEditModal(ex)} className="p-1.5 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
                     <Pencil size={16} />
                   </button>
                   <button onClick={() => openDeleteModal(ex.id)} className="p-1.5 hover:text-red-500 hover:bg-red-950/50 rounded-lg transition-colors" title="Remove">
@@ -495,31 +506,78 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {/* Custom Edit Modal */}
       {editModal.show && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#18181b] border border-[#27272a] rounded-2xl p-5 w-full max-w-sm shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+          <div className="bg-[#18181b] border border-[#27272a] rounded-3xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-bold text-white">แก้ไขชื่อท่าออกกำลังกาย</h3>
-              <button onClick={() => setEditModal({ show: false, exerciseId: null, currentName: '' })} className="text-zinc-500 hover:text-white transition-colors">
-                <X size={20} />
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Target className="text-red-500" size={20} /> แก้ไขท่าออกกำลังกาย
+              </h3>
+              <button onClick={() => setEditModal({ show: false, exerciseId: null, category: 'Upper Body', name: '', target: '', isBodyweight: false })} className="text-zinc-500 hover:text-white transition-colors bg-zinc-900 p-1.5 rounded-full">
+                <X size={16} />
               </button>
             </div>
             
-            <input
-              type="text"
-              value={newNameInput}
-              onChange={(e) => setNewNameInput(e.target.value)}
-              placeholder="พิมพ์ชื่อท่าออกกำลังกาย..."
-              className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:border-red-500 focus:outline-none"
-              autoFocus
-            />
-            
-            <div className="flex gap-3 justify-end mt-2">
-              <button onClick={confirmEditExercise} className="px-4 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white shadow-[0_0_10px_rgba(220,38,38,0.3)] transition-colors">
-                บันทึก
-              </button>
+            <div className="flex flex-col gap-4">
+              
+              {/* เลือกหมวดหมู่ */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">หมวดหมู่ส่วนของร่างกาย</label>
+                <select 
+                  value={editModal.category}
+                  onChange={(e) => setEditModal({...editModal, category: e.target.value})}
+                  className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-sm font-bold text-white focus:border-red-500 focus:outline-none appearance-none"
+                >
+                  {Object.keys(EXERCISE_LIBRARY).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {editModal.category !== 'Custom (กำหนดเอง)' && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">เลือกท่ามาตรฐาน</label>
+                  <select 
+                    onChange={(e) => handlePresetSelect(e.target.value)}
+                    className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-sm font-bold text-emerald-400 focus:border-emerald-500 focus:outline-none appearance-none"
+                  >
+                    <option value="">-- เลือกท่าออกกำลังกาย --</option>
+                    {EXERCISE_LIBRARY[editModal.category].map(ex => (
+                      <option key={ex.name} value={ex.name}>{ex.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="h-px bg-zinc-800/50 w-full my-1"></div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">ชื่อท่า (ปรับแก้ได้)</label>
+                <input
+                  type="text"
+                  value={editModal.name}
+                  onChange={(e) => setEditModal({...editModal, name: e.target.value})}
+                  placeholder="พิมพ์ชื่อท่าออกกำลังกาย..."
+                  className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-sm text-white focus:border-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">ส่วนที่ได้ (อธิบายเพิ่มเติม)</label>
+                <input
+                  type="text"
+                  value={editModal.target}
+                  onChange={(e) => setEditModal({...editModal, target: e.target.value})}
+                  placeholder="เช่น กล้ามเนื้อหน้าอก, แกนกลางลำตัว..."
+                  className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-sm text-white focus:border-red-500 focus:outline-none"
+                />
+              </div>
+
             </div>
+            
+            <button onClick={confirmEditExercise} className="mt-2 w-full px-4 py-4 rounded-xl text-xs uppercase tracking-widest font-black bg-red-600 hover:bg-red-700 text-white shadow-[0_0_15px_rgba(220,38,38,0.3)] transition-colors flex justify-center">
+              บันทึกข้อมูลท่า
+            </button>
           </div>
         </div>
       )}

@@ -321,7 +321,35 @@ export default function CalendarPage() {
 
   const analysis = getScienceAnalysis();
 
-return (
+  const getWorkoutDistribution = () => {
+    if (!selectedData?.workouts?.length) return null;
+    
+    let dist: Record<string, number> = { 'Upper Body': 0, 'Lower Body': 0, 'Full Body & Core': 0, 'Other': 0 };
+    let totalSets = 0;
+
+    selectedData.workouts.forEach((w: any) => {
+       const notes = w.notes ? JSON.parse(w.notes) : null;
+       const isArray = Array.isArray(notes);
+       const sets = isArray ? notes : (notes?.sets || []);
+       const completedSets = sets.filter((s: any) => s.done).length;
+       
+       const cat = isArray ? 'Other' : (notes?.category || 'Other');
+       
+       if (cat === 'Upper Body') dist['Upper Body'] += completedSets;
+       else if (cat === 'Lower Body') dist['Lower Body'] += completedSets;
+       else if (cat === 'Full Body & Core') dist['Full Body & Core'] += completedSets;
+       else dist['Other'] += completedSets;
+
+       totalSets += completedSets;
+    });
+
+    if (totalSets === 0) return null;
+    return { dist, totalSets };
+  };
+
+  const workoutDist = getWorkoutDistribution();
+
+  return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-500 pb-24">
       
       {/* Header */}
@@ -531,7 +559,10 @@ return (
                 <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center mb-1">
                   <Utensils size={14} className="text-orange-500" />
                 </div>
-                <span className="text-2xl font-bold text-white">{selectedData.calories || 0}</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-white">{selectedData.calories || 0}</span>
+                  <span className="text-xs font-bold text-zinc-500">/ {analysis?.targetCal || 0}</span>
+                </div>
                 <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Kcal Eaten</span>
               </div>
 
@@ -547,6 +578,34 @@ return (
                 </span>
               </div>
             </div>
+
+            {workoutDist && (
+              <div className="bg-[#18181b] border border-[#27272a] p-5 rounded-3xl flex flex-col gap-4 animate-in zoom-in-95 duration-300">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Activity size={14} className="text-emerald-500" /> Workout Focus (Total Sets)
+                </span>
+                <div className="flex flex-col gap-3.5">
+                  {Object.entries(workoutDist.dist).filter(([_, val]) => val > 0).map(([cat, val]) => (
+                    <div key={cat} className="flex flex-col gap-1.5">
+                      <div className="flex justify-between items-baseline px-1">
+                        <span className="text-xs font-bold text-white">{cat}</span>
+                        <span className="text-[10px] font-bold text-zinc-500">{val} Sets <span className="text-zinc-600 font-medium">({Math.round((val/workoutDist.totalSets)*100)}%)</span></span>
+                      </div>
+                      <div className="w-full bg-zinc-900 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-1000 ${
+                            cat === 'Upper Body' ? 'bg-blue-500' : 
+                            cat === 'Lower Body' ? 'bg-orange-500' : 
+                            cat === 'Full Body & Core' ? 'bg-emerald-500' : 'bg-zinc-500'
+                          }`} 
+                          style={{ width: `${(val/workoutDist.totalSets)*100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-3">
               <div className="bg-[#18181b] border border-[#27272a] p-5 rounded-3xl flex items-center justify-between">
@@ -691,14 +750,34 @@ return (
                   <div className="flex flex-col gap-3">
                     {selectedData.workouts.map((w: any, i: number) => {
                       const notes = w.notes ? JSON.parse(w.notes) : null;
-                      const sets = notes ? (Array.isArray(notes) ? notes : notes.sets || []) : [];
-                      const isBW = notes && !Array.isArray(notes) ? notes.isBodyweight : false;
+                      const isArray = Array.isArray(notes);
+                      const sets = isArray ? notes : (notes?.sets || []);
+                      const isBW = isArray ? false : (notes?.isBodyweight || false);
+                      const category = isArray ? '' : (notes?.category || '');
+                      const target = isArray ? '' : (notes?.target || '');
+                      
                       const completedSets = sets.filter((s: any) => s.done);
 
                       return (
                         <div key={i} className="bg-[#09090b] p-4 rounded-xl border border-zinc-800 flex flex-col gap-3">
                           <div className="flex justify-between items-center border-b border-zinc-800/80 pb-2">
-                            <span className="text-sm font-bold text-white">{w.exercise_name}</span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-sm font-bold text-white">{w.exercise_name}</span>
+                              
+                              <div className="flex flex-wrap items-center gap-2">
+                                {category && category !== 'Custom (กำหนดเอง)' && category !== 'Other' && (
+                                  <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-500">
+                                    {category}
+                                  </span>
+                                )}
+                                {target && (
+                                  <span className="text-[9px] font-medium text-zinc-400">
+                                    {category !== 'Custom (กำหนดเอง)' && category !== 'Other' ? '• ' : ''}โดน: {target}
+                                  </span>
+                                )}
+                              </div>
+
+                            </div>
                             <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border border-emerald-500/20">
                               {completedSets.length} Sets
                             </span>

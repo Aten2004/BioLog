@@ -11,12 +11,8 @@ export const metadata: Metadata = {
   description: "Advanced biometric and fitness tracker",
   manifest: "/manifest.json", 
   icons: {
-    icon: [
-      { url: "/Logo_Web.svg", type: "image/svg+xml" }, 
-    ],
-    apple: [
-      { url: "/icon.png", sizes: "512x512", type: "image/png" }, 
-    ],
+    icon: "/Logo_Web.svg",
+    apple: "/icon.png",   
   },
 };
 
