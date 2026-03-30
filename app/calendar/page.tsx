@@ -647,7 +647,7 @@ export default function CalendarPage() {
                     <div 
                       key={idx} 
                       onClick={() => setSelectedImage(photo.photo_url)}
-                      className="min-w-[140px] sm:min-w-[160px] aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-zinc-800 flex-shrink-0 relative group cursor-pointer active:scale-95 transition-transform"
+                      className="w-28 h-40 sm:w-32 sm:h-48 rounded-2xl overflow-hidden bg-black border border-zinc-800 flex-shrink-0 relative group cursor-pointer active:scale-95 transition-transform"
                     >
                       <img src={photo.photo_url} alt={photo.label} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 pt-8">
