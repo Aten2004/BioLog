@@ -596,7 +596,7 @@ export default function Home() {
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center"><Utensils size={14} className="text-orange-500" /></div>
-                <span className="text-xs font-bold text-white uppercase tracking-wider">Diet</span>
+                <span className="text-xs font-bold text-white uppercase tracking-wider">Nutrition</span>
               </div>
               <ChevronRight size={14} className="text-zinc-600 group-hover:text-orange-500 transition-colors" />
             </div>

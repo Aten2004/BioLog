@@ -88,9 +88,9 @@ export default function Navigation() {
   if (pathname === '/login' || pathname === '/onboarding') return null;
 
   const navItems = [
-    { href: '/', icon: Home, label: 'Overview' },
+    { href: '/', icon: Home, label: 'Home' },
     { href: '/workout', icon: Activity, label: 'Workout' },
-    { href: '/nutrition', icon: Utensils, label: 'Food' },
+    { href: '/nutrition', icon: Utensils, label: 'Nutrition' }, 
     { href: '/calendar', icon: Calendar, label: 'History' },
   ];
 

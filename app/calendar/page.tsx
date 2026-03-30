@@ -327,7 +327,7 @@ return (
       {/* Header */}
       <section className="flex items-end justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white">Calendar</h2>
+          <h2 className="text-3xl font-bold text-white">History</h2>
         </div>
       </section>
 

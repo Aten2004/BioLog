@@ -25,6 +25,12 @@ export default function NutritionPage() {
 
   const [goals, setGoals] = useState({ cal: 2000, protein: 150, carb: 200, fat: 55 });
 
+  // 🌟 State สำหรับจัดการการแก้ไขอาหาร
+  const [editModal, setEditModal] = useState({ 
+    show: false, 
+    meal: { id: '', name: '', cal: '', p: '', c: '', f: '' } 
+  });
+
   useEffect(() => {
     const loadNutritionData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -87,7 +93,7 @@ export default function NutritionPage() {
             seenNames.add(lowerName);
             uniqueFoods.push(item);
           }
-          if (uniqueFoods.length >= 8) break; // ดึงมาแค่ 8 รายการล่าสุด
+          if (uniqueFoods.length >= 8) break; 
         }
         setFrequentFoods(uniqueFoods);
       }
@@ -184,6 +190,55 @@ export default function NutritionPage() {
   const deleteMeal = async (id: string) => {
     const { error } = await supabase.from('food_logs').delete().eq('id', id);
     if (!error) setMeals(meals.filter(m => m.id !== id));
+  };
+
+  const openEditModal = (meal: any) => {
+    setEditModal({
+      show: true,
+      meal: {
+        id: meal.id,
+        name: meal.name,
+        cal: meal.calories.toString(),
+        p: meal.protein?.toString() || '0',
+        c: meal.carbs?.toString() || '0',
+        f: meal.fat?.toString() || '0',
+      }
+    });
+  };
+
+  const handleUpdateMeal = async () => {
+    if (!user || !editModal.meal.id) return;
+    if (!editModal.meal.name || !editModal.meal.cal) {
+      alert('กรุณากรอกชื่อและแคลอรี่');
+      return;
+    }
+    
+    setIsSaving(true);
+    
+    const payload = {
+      name: editModal.meal.name.trim(),
+      calories: parseInt(editModal.meal.cal) || 0,
+      protein: parseFloat(editModal.meal.p) || 0,
+      carbs: parseFloat(editModal.meal.c) || 0,
+      fat: parseFloat(editModal.meal.f) || 0
+    };
+
+    const { data, error } = await supabase
+      .from('food_logs')
+      .update(payload)
+      .eq('id', editModal.meal.id)
+      .select()
+      .single();
+
+    setIsSaving(false);
+
+    if (error) {
+      alert('เกิดข้อผิดพลาดในการแก้ไขอาหาร');
+    } else if (data) {
+      setMeals(meals.map(m => m.id === editModal.meal.id ? data : m));
+      setEditModal({ show: false, meal: { id: '', name: '', cal: '', p: '', c: '', f: '' } });
+      triggerToast('แก้ไขอาหารเรียบร้อย!');
+    }
   };
 
   if (isLoading) return <div className="flex justify-center items-center h-[50vh]"><Loader2 className="animate-spin text-red-500" size={32} /></div>;
@@ -346,12 +401,22 @@ export default function NutritionPage() {
                     </span>
                   </div>
                 </div>
-                <button 
-                  onClick={() => deleteMeal(meal.id)}
-                  className="z-10 p-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-colors sm:opacity-0 sm:group-hover:opacity-100"
-                >
-                  <X size={14} />
-                </button>
+                
+                {/* 🌟 เพิ่มปุ่มแก้ไขตรงนี้คู่กับปุ่มลบ */}
+                <div className="flex gap-2 z-10">
+                  <button 
+                    onClick={() => openEditModal(meal)}
+                    className="p-2 bg-blue-500/10 hover:bg-blue-500 text-blue-500 hover:text-white rounded-xl transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+                  >
+                    <PenLine size={14} />
+                  </button>
+                  <button 
+                    onClick={() => deleteMeal(meal.id)}
+                    className="p-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -382,6 +447,61 @@ export default function NutritionPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {editModal.show && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#18181b] border border-[#27272a] rounded-3xl p-6 w-full max-w-sm shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-white">แก้ไขข้อมูลอาหาร</h3>
+              <button 
+                onClick={() => setEditModal({ show: false, meal: { id: '', name: '', cal: '', p: '', c: '', f: '' } })} 
+                className="text-zinc-500 hover:text-white bg-zinc-900 p-1.5 rounded-full transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">ชื่ออาหาร</label>
+                <input
+                  type="text"
+                  placeholder="ชื่ออาหาร"
+                  className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                  value={editModal.meal.name}
+                  onChange={(e) => setEditModal({ ...editModal, meal: { ...editModal.meal, name: e.target.value } })}
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase text-center">Kcal</span>
+                  <input type="number" className="bg-[#09090b] border border-zinc-800 rounded-xl px-1 py-3 text-sm font-black text-center text-white focus:outline-none focus:border-orange-500" value={editModal.meal.cal} onChange={(e) => setEditModal({ ...editModal, meal: { ...editModal.meal, cal: e.target.value } })} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-red-500 font-bold uppercase text-center">Pro</span>
+                  <input type="number" className="bg-[#09090b] border border-zinc-800 rounded-xl px-1 py-3 text-sm font-black text-center text-white focus:outline-none focus:border-red-500" value={editModal.meal.p} onChange={(e) => setEditModal({ ...editModal, meal: { ...editModal.meal, p: e.target.value } })} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-amber-500 font-bold uppercase text-center">Carb</span>
+                  <input type="number" className="bg-[#09090b] border border-zinc-800 rounded-xl px-1 py-3 text-sm font-black text-center text-white focus:outline-none focus:border-amber-500" value={editModal.meal.c} onChange={(e) => setEditModal({ ...editModal, meal: { ...editModal.meal, c: e.target.value } })} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-yellow-500 font-bold uppercase text-center">Fat</span>
+                  <input type="number" className="bg-[#09090b] border border-zinc-800 rounded-xl px-1 py-3 text-sm font-black text-center text-white focus:outline-none focus:border-yellow-500" value={editModal.meal.f} onChange={(e) => setEditModal({ ...editModal, meal: { ...editModal.meal, f: e.target.value } })} />
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleUpdateMeal} 
+              disabled={isSaving} 
+              className="w-full mt-2 px-4 py-3.5 rounded-xl text-xs uppercase tracking-widest font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)] transition-colors flex justify-center items-center"
+            >
+              {isSaving ? <Loader2 size={16} className="animate-spin" /> : 'บันทึกการแก้ไข'}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Toast Notification */}
