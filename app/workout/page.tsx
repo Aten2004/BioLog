@@ -169,7 +169,7 @@ export default function WorkoutPage() {
             new Notification("หมดเวลาพักแล้ว! ⏱️", {
               body: "ลุกขึ้นมาลุยเซตต่อไปกันเลย 🔥",
               vibrate: [300, 100, 300],
-            });
+            } as any);
           }
 
           showNotification('หมดเวลาพักแล้ว! ลุยเซตต่อไปกันเลย🔥', 'info');
