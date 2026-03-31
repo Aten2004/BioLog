@@ -96,23 +96,29 @@ export default function ProfilePage() {
       const today = new Date();
       today.setHours(0,0,0,0);
       
-      const { data: bodyLogs } = await supabase
-        .from('body_logs')
-        .select('date')
-        .eq('user_id', session.user.id)
-        .order('date', { ascending: false });
+      const [bodyLogsRes, foodLogsRes, workoutLogsRes] = await Promise.all([
+        supabase.from('body_logs').select('date').eq('user_id', session.user.id),
+        supabase.from('food_logs').select('date').eq('user_id', session.user.id),
+        supabase.from('workout_logs').select('date').eq('user_id', session.user.id)
+      ]);
 
       const { count: workoutCount } = await supabase
         .from('workout_logs')
         .select('date', { count: 'exact', head: true })
         .eq('user_id', session.user.id);
 
-      let streak = 0;
-      if (bodyLogs && bodyLogs.length > 0) {
-        const dates = bodyLogs.map(l => new Date(l.date).getTime());
-        const uniqueDates = Array.from(new Set(dates)).sort((a, b) => b - a); 
+      const allDates = new Set<string>();
+      bodyLogsRes.data?.forEach(l => allDates.add(l.date));
+      foodLogsRes.data?.forEach(l => allDates.add(l.date));
+      workoutLogsRes.data?.forEach(l => allDates.add(l.date));
 
+      const uniqueDates = Array.from(allDates).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      
+      let streak = 0;
+      if (uniqueDates.length > 0) {
         const latestDate = new Date(uniqueDates[0]);
+        latestDate.setHours(0,0,0,0);
+        
         const diffDays = Math.floor((today.getTime() - latestDate.getTime()) / (1000 * 60 * 60 * 24));
         
         if (diffDays <= 1) {

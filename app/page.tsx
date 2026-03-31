@@ -500,7 +500,7 @@ export default function Home() {
                 <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/5 rounded-full blur-xl -mr-5 -mt-5"></div>
                 <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Moon size={12} className="text-indigo-400" /> Sleep</span>
                 <div className="flex items-baseline gap-1 mt-1">
-                  <input type="number" value={sleep} onChange={(e) => setSleep(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-3xl font-black text-white focus:outline-none p-0" />
+                  <input type="number" step="0.01" value={sleep} onChange={(e) => setSleep(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-3xl font-black text-white focus:outline-none p-0" />
                   <span className="text-xs font-bold text-zinc-600">hrs</span>
                 </div>
               </div>
@@ -515,7 +515,7 @@ export default function Home() {
 
               <div className="bg-[#09090b] border border-zinc-800 p-4 rounded-[1.5rem] flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Moon size={14} className="text-indigo-400" /> Sleep</span>
-                <div className="flex items-center gap-2 w-1/3"><input type="number" value={sleep} onChange={(e) => setSleep(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-xl font-black text-white focus:outline-none text-right" /><span className="text-xs font-bold text-zinc-600">hrs</span></div>
+                <div className="flex items-center gap-2 w-1/3"><input type="number" step="0.01" value={sleep} onChange={(e) => setSleep(e.target.value)} placeholder="0.0" className="w-full bg-transparent text-xl font-black text-white focus:outline-none text-right" /><span className="text-xs font-bold text-zinc-600">hrs</span></div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

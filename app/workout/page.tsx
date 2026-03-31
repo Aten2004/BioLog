@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Dumbbell, Timer, Plus, Check, Pencil, Trash2, Activity, Flame, CheckCircle, Info, X, Play, Square, Loader2, Target } from 'lucide-react';
@@ -145,15 +145,40 @@ export default function WorkoutPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
+    
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
     if (isTimerRunning && targetTime) {
       const checkTime = () => {
         const now = Date.now();
         const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000));
         setTimeLeft(remaining);
-        if (remaining <= 0) { setIsTimerRunning(false); setTargetTime(null); }
+        
+        if (remaining <= 0) { 
+          setIsTimerRunning(false); 
+          setTargetTime(null); 
+          localStorage.removeItem('workout_timer_target');
+
+          if ("vibrate" in navigator) {
+            navigator.vibrate([300, 100, 300, 100, 300]); 
+          }
+
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("หมดเวลาพักแล้ว! ⏱️", {
+              body: "ลุกขึ้นมาลุยเซตต่อไปกันเลย 🔥",
+              vibrate: [300, 100, 300],
+            });
+          }
+
+          showNotification('หมดเวลาพักแล้ว! ลุยเซตต่อไปกันเลย🔥', 'info');
+        }
       };
-      checkTime(); interval = setInterval(checkTime, 1000); 
+      checkTime(); 
+      interval = setInterval(checkTime, 1000); 
     }
+    
     return () => clearInterval(interval);
   }, [isTimerRunning, targetTime]);
 
@@ -263,14 +288,16 @@ export default function WorkoutPage() {
     setEditModal({ show: false, exerciseId: null, category: 'Upper Body', name: '', target: '', isBodyweight: false });
   };
 
-  const totalVolume = exercises.reduce((acc, ex) => {
-    const exVolume = ex.sets.reduce((setAcc, set) => {
-      if (!set.done) return setAcc;
-      const weightToUse = ex.isBodyweight ? 0 : Number(set.weight || 0);
-      return setAcc + (weightToUse * Number(set.reps || 0));
+  const totalVolume = useMemo(() => {
+    return exercises.reduce((acc, ex) => {
+      const exVolume = ex.sets.reduce((setAcc, set) => {
+        if (!set.done) return setAcc;
+        const weightToUse = ex.isBodyweight ? 0 : Number(set.weight || 0);
+        return setAcc + (weightToUse * Number(set.reps || 0));
+      }, 0);
+      return acc + exVolume;
     }, 0);
-    return acc + exVolume;
-  }, 0);
+  }, [exercises]);
 
   const getToastStyle = () => {
     switch (toast.type) {

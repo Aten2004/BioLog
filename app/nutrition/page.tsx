@@ -82,7 +82,8 @@ export default function NutritionPage() {
         .select('name, calories, protein, carbs, fat')
         .eq('user_id', session.user.id)
         .gte('date', thirtyDaysAgoStr)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(30);
 
       if (historyMeals) {
         const uniqueFoods: any[] = [];
@@ -93,7 +94,7 @@ export default function NutritionPage() {
             seenNames.add(lowerName);
             uniqueFoods.push(item);
           }
-          if (uniqueFoods.length >= 8) break; 
+          if (uniqueFoods.length >= 4) break;
         }
         setFrequentFoods(uniqueFoods);
       }
