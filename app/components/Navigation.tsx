@@ -66,8 +66,6 @@ export default function Navigation() {
   useEffect(() => {
     let isMounted = true;
     const loadProfile = async () => {
-      if (profile) return; 
-
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const { data } = await supabase
@@ -85,7 +83,7 @@ export default function Navigation() {
     }
 
     return () => { isMounted = false; };
-  }, []); 
+  }, [pathname]); 
 
   if (pathname === '/login' || pathname === '/onboarding') return null;
 
