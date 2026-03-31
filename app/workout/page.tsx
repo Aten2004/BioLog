@@ -145,40 +145,15 @@ export default function WorkoutPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-
     if (isTimerRunning && targetTime) {
       const checkTime = () => {
         const now = Date.now();
         const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000));
         setTimeLeft(remaining);
-        
-        if (remaining <= 0) { 
-          setIsTimerRunning(false); 
-          setTargetTime(null); 
-          localStorage.removeItem('workout_timer_target');
-
-          if ("vibrate" in navigator) {
-            navigator.vibrate([300, 100, 300, 100, 300]); 
-          }
-
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("หมดเวลาพักแล้ว! ⏱️", {
-              body: "ลุกขึ้นมาลุยเซตต่อไปกันเลย 🔥",
-              vibrate: [300, 100, 300],
-            } as any);
-          }
-
-          showNotification('หมดเวลาพักแล้ว! ลุยเซตต่อไปกันเลย🔥', 'info');
-        }
+        if (remaining <= 0) { setIsTimerRunning(false); setTargetTime(null); }
       };
-      checkTime(); 
-      interval = setInterval(checkTime, 1000); 
+      checkTime(); interval = setInterval(checkTime, 1000); 
     }
-    
     return () => clearInterval(interval);
   }, [isTimerRunning, targetTime]);
 
