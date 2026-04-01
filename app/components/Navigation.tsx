@@ -151,7 +151,7 @@ export default function Navigation() {
       <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md h-16 bg-[#09090b]/80 backdrop-blur-md border-b border-[#27272a] flex items-center justify-between px-4 z-50">
         
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="h-13 flex items-center justify-center transition-transform group-hover:scale-105">
+          <div className="h-13 flex items-center justify-center">
             <img 
               src="/Logo_Web.svg" 
               alt="BioLog Logo" 
