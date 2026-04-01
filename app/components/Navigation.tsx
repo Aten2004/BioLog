@@ -65,25 +65,73 @@ export default function Navigation() {
 
   useEffect(() => {
     let isMounted = true;
-    const loadProfile = async () => {
+    
+    const loadProfileAndStreak = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { data } = await supabase
-          .from('user_profiles')
-          .select('display_name, avatar_url, streak_count')
-          .eq('id', session.user.id)
-          .single();
+      if (!session) return;
+
+      const { data: profileData } = await supabase
+        .from('user_profiles')
+        .select('display_name, avatar_url, streak_count')
+        .eq('id', session.user.id)
+        .single();
+      
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      
+      const [bodyLogsRes, foodLogsRes, workoutLogsRes] = await Promise.all([
+        supabase.from('body_logs').select('date').eq('user_id', session.user.id),
+        supabase.from('food_logs').select('date').eq('user_id', session.user.id),
+        supabase.from('workout_logs').select('date').eq('user_id', session.user.id)
+      ]);
+
+      const allDates = new Set<string>();
+      bodyLogsRes.data?.forEach(l => allDates.add(l.date));
+      foodLogsRes.data?.forEach(l => allDates.add(l.date));
+      workoutLogsRes.data?.forEach(l => allDates.add(l.date));
+
+      const uniqueDates = Array.from(allDates).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      
+      let streak = 0;
+      if (uniqueDates.length > 0) {
+        const latestDate = new Date(uniqueDates[0]);
+        latestDate.setHours(0,0,0,0);
         
-        if (data && isMounted) setProfile(data);
+        const diffDays = Math.floor((today.getTime() - latestDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays <= 1) {
+          streak = 1;
+          for (let i = 1; i < uniqueDates.length; i++) {
+            const prevDate = new Date(uniqueDates[i-1]);
+            const currDate = new Date(uniqueDates[i]);
+            const diff = Math.floor((prevDate.getTime() - currDate.getTime()) / (1000 * 60 * 60 * 24));
+            
+            if (diff === 1) streak++;
+            else break;
+          }
+        }
       }
+
+      if (profileData && profileData.streak_count !== streak) {
+        await supabase.from('user_profiles').update({ streak_count: streak }).eq('id', session.user.id);
+        profileData.streak_count = streak;
+      }
+
+      if (isMounted) setProfile(profileData);
     };
 
     if (pathname !== '/login' && pathname !== '/onboarding') {
-      loadProfile();
+      loadProfileAndStreak();
     }
 
-    return () => { isMounted = false; };
-  }, [pathname]); 
+    const handleSync = () => { if (isMounted) loadProfileAndStreak(); };
+    window.addEventListener('sync_data', handleSync);
+
+    return () => { 
+      isMounted = false; 
+      window.removeEventListener('sync_data', handleSync);
+    };
+  }, [pathname]);
 
   if (pathname === '/login' || pathname === '/onboarding') return null;
 

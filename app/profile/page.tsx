@@ -70,7 +70,7 @@ export default function ProfilePage() {
       if (!session) { router.push('/login'); return; }
       setUser(session.user);
 
-      // ดึง Profile ปกติ
+      // ดึง Profile
       const { data: profile } = await supabase.from('user_profiles').select('*').eq('id', session.user.id).single();
       if (profile) {
         const measurements = profile.body_measurements || {};
@@ -93,52 +93,12 @@ export default function ProfilePage() {
         });
       }
 
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      
-      const [bodyLogsRes, foodLogsRes, workoutLogsRes] = await Promise.all([
-        supabase.from('body_logs').select('date').eq('user_id', session.user.id),
-        supabase.from('food_logs').select('date').eq('user_id', session.user.id),
-        supabase.from('workout_logs').select('date').eq('user_id', session.user.id)
-      ]);
-
       const { count: workoutCount } = await supabase
         .from('workout_logs')
         .select('date', { count: 'exact', head: true })
         .eq('user_id', session.user.id);
 
-      const allDates = new Set<string>();
-      bodyLogsRes.data?.forEach(l => allDates.add(l.date));
-      foodLogsRes.data?.forEach(l => allDates.add(l.date));
-      workoutLogsRes.data?.forEach(l => allDates.add(l.date));
-
-      const uniqueDates = Array.from(allDates).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-      
-      let streak = 0;
-      if (uniqueDates.length > 0) {
-        const latestDate = new Date(uniqueDates[0]);
-        latestDate.setHours(0,0,0,0);
-        
-        const diffDays = Math.floor((today.getTime() - latestDate.getTime()) / (1000 * 60 * 60 * 24));
-        
-        if (diffDays <= 1) {
-          streak = 1;
-          for (let i = 1; i < uniqueDates.length; i++) {
-            const prevDate = new Date(uniqueDates[i-1]);
-            const currDate = new Date(uniqueDates[i]);
-            const diff = Math.floor((prevDate.getTime() - currDate.getTime()) / (1000 * 60 * 60 * 24));
-            
-            if (diff === 1) streak++;
-            else break;
-          }
-        }
-      }
-
-      if (profile && profile.streak_count !== streak) {
-        await supabase.from('user_profiles').update({ streak_count: streak }).eq('id', session.user.id);
-      }
-
-      setStats({ currentStreak: streak, totalWorkouts: workoutCount || 0 });
+      setStats({ currentStreak: profile?.streak_count || 0, totalWorkouts: workoutCount || 0 });
       setIsLoading(false);
     };
     loadProfile();
@@ -215,6 +175,8 @@ export default function ProfilePage() {
         await supabase.from('user_profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
         
         setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
+        window.dispatchEvent(new Event('profile_updated'));
+
         setActiveModal('none');
         setIsUploading(false);
         setImageToCrop(null);
@@ -255,8 +217,12 @@ export default function ProfilePage() {
 
     const { error } = await supabase.from('user_profiles').upsert(payload);
     setIsSaving(false);
-    if (!error) setActiveModal('none');
-    else alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    if (!error) {
+      window.dispatchEvent(new Event('profile_updated')); 
+      setActiveModal('none');
+    } else {
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    }
   };
 
   const handleSignOut = async () => {
